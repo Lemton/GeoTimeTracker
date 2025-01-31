@@ -1,0 +1,100 @@
+[
+    {
+      "featureType": "poi",
+      "elementType": "all",
+      "stylers": [
+        { "visibility": "off" }
+      ]
+    },
+    {
+      "featureType": "poi.business",
+      "elementType": "all",
+      "stylers": [
+        { "visibility": "off" }
+      ]
+    },
+    {
+      "featureType": "poi.government",
+      "elementType": "all",
+      "stylers": [
+        { "visibility": "off" }
+      ]
+    },
+    {
+      "featureType": "poi.medical",
+      "elementType": "all",
+      "stylers": [
+        { "visibility": "off" }
+      ]
+    },
+    {
+      "featureType": "poi.park",
+      "elementType": "all",
+      "stylers": [
+        { "visibility": "off" }
+      ]
+    },
+    {
+      "featureType": "poi.place_of_worship",
+      "elementType": "all",
+      "stylers": [
+        { "visibility": "off" }
+      ]
+    },
+    {
+      "featureType": "poi.school",
+      "elementType": "all",
+      "stylers": [
+        { "visibility": "off" }
+      ]
+    },
+    {
+      "featureType": "poi.sports_complex",
+      "elementType": "all",
+      "stylers": [
+        { "visibility": "off" }
+      ]
+    },
+    {
+      "featureType": "transit",
+      "elementType": "all",
+      "stylers": [
+        { "visibility": "off" }
+      ]
+    },
+    {
+      "featureType": "road",
+      "elementType": "labels",
+      "stylers": [
+        { "visibility": "on" }
+      ]
+    },
+    {
+      "featureType": "road",
+      "elementType": "geometry",
+      "stylers": [
+        { "visibility": "simplified" }
+      ]
+    },
+    {
+      "featureType": "water",
+      "elementType": "all",
+      "stylers": [
+        { "visibility": "on" }
+      ]
+    },
+    {
+      "featureType": "landscape",
+      "elementType": "all",
+      "stylers": [
+        { "visibility": "on" }
+      ]
+    },
+    {
+      "featureType": "administrative",
+      "elementType": "labels",
+      "stylers": [
+        { "visibility": "on" }
+      ]
+    }
+  ]
