@@ -16,6 +16,9 @@ dependencies:
   geolocator: ^13.0.2
   flutter_localizations:
     sdk: flutter
+  flutter_dotenv: ^5.0.2
+  http: ^0.13.3
+  mockito: ^5.0.16
 
 dev_dependencies:
   flutter_test:
@@ -31,3 +34,4 @@ flutter:
   assets:
     - assets/pinpoint.png
     - assets/map_style.json
+    - .env

@@ -25,7 +25,7 @@ class _HomeMapViewState extends State<HomeMapView> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Map Features'),
+        title: const Text('Go touch grass and visit me!'),
         actions: [
           IconButton(
             icon: const Icon(Icons.settings),
