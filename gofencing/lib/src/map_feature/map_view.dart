@@ -6,6 +6,8 @@ import 'package:flutter/services.dart' show rootBundle, ByteData;
 import 'dart:ui' as ui;
 
 class MapViewWidget extends StatefulWidget {
+  const MapViewWidget({super.key});
+
   @override
   _MapViewWidgetState createState() => _MapViewWidgetState();
 }
@@ -90,10 +92,8 @@ class _MapViewWidgetState extends State<MapViewWidget> {
 
   Future<void> _loadMapStyle() async {
     _mapStyle = await rootBundle.loadString('assets/map_style.json');
-    if (mapController != null) {
-      mapController.setMapStyle(_mapStyle);
+    mapController.setMapStyle(_mapStyle);
     }
-  }
 
   void _onMapCreated(GoogleMapController controller) {
     mapController = controller;
