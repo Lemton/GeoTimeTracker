@@ -50,27 +50,18 @@ class _MapViewWidgetState extends State<MapViewWidget> {
     super.dispose();
   }
 
-  Future<void> _loadCustomMarker() async {
-    final ByteData data = await rootBundle.load('assets/pinpoint.png');
-    final ui.Codec codec = await ui.instantiateImageCodec(
-      data.buffer.asUint8List(),
-      targetWidth: 48, // Set the desired width
-      targetHeight: 48, // Set the desired height
-    );
-    final ui.FrameInfo fi = await codec.getNextFrame();
-    final ByteData? byteData = await fi.image.toByteData(format: ui.ImageByteFormat.png);
-    final Uint8List resizedData = byteData!.buffer.asUint8List();
-
-    setState(() {
-      _customIcon = BitmapDescriptor.fromBytes(resizedData);
-    });
-  }
-
   Future<void> _loadMapStyle() async {
     _mapStyle = await rootBundle.loadString('assets/map_style.json');
-    if (mapController != null) {
-      mapController.setMapStyle(_mapStyle);
-    }
+  }
+
+  Future<void> _loadCustomMarker() async {
+    final ByteData data = await rootBundle.load('assets/custom_marker.png');
+    final Uint8List bytes = data.buffer.asUint8List();
+    final ui.Codec codec = await ui.instantiateImageCodec(bytes, targetWidth: 100);
+    final ui.FrameInfo fi = await codec.getNextFrame();
+    final ByteData? byteData = await fi.image.toByteData(format: ui.ImageByteFormat.png);
+    final Uint8List resizedBytes = byteData!.buffer.asUint8List();
+    _customIcon = BitmapDescriptor.fromBytes(resizedBytes);
   }
 
   void _onMapCreated(GoogleMapController controller) {

@@ -10,7 +10,7 @@ class LocationService {
   StreamSubscription<Position>? _positionStreamSubscription;
   final StreamController<LatLng> _locationController = StreamController<LatLng>.broadcast();
   final StreamController<String> _streetViewController = StreamController<String>.broadcast();
-  LatLng? _lastStreetViewLocation;
+  
   LatLng? _currentStreetViewLocation;
 
   Stream<LatLng> get locationStream => _locationController.stream;
@@ -21,7 +21,7 @@ class LocationService {
   void startLocationUpdates() {
     const LocationSettings locationSettings = LocationSettings(
       accuracy: LocationAccuracy.high,
-      distanceFilter: 200, // Update distance in meters
+      distanceFilter: 10, // Update distance in meters
     );
 
     _positionStreamSubscription = Geolocator.getPositionStream(locationSettings: locationSettings)
