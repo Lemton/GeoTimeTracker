@@ -22,8 +22,21 @@
         android:layout_height="wrap_content"
         android:layout_margin="16dp"
         android:text="Zurück"
-        android:alpha="0.85"
+        android:alpha="0.9"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
+
+    <TextView
+        android:id="@+id/trackingModeInfo"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_margin="16dp"
+        android:background="#B3FFFFFF"
+        android:padding="8dp"
+        android:textColor="@color/black"
+        android:textSize="14sp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        tools:text="GPS Tracking: aktiv" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

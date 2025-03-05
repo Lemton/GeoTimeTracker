@@ -2,94 +2,197 @@ package com.karte.lbsapp
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.graphics.Color
 import android.os.Bundle
-import android.os.Looper
-import android.widget.Button
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.example.lbsapp.R
 import com.example.lbsapp.databinding.ActivityMapsBinding
-import com.google.android.gms.location.*
+import com.example.lbsapp.tracking.TrackingManager
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.OnMapReadyCallback
 import com.google.android.gms.maps.SupportMapFragment
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MarkerOptions
+import com.google.android.gms.maps.model.PolylineOptions
 
-@Suppress("DEPRECATION")
 class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
 
     private lateinit var mMap: GoogleMap
     private lateinit var binding: ActivityMapsBinding
-    private lateinit var fusedLocationClient: FusedLocationProviderClient
-    private lateinit var locationCallback: LocationCallback
-    private lateinit var locationRequest: LocationRequest
+    private lateinit var trackingManager: TrackingManager
+    private lateinit var trackingModeInfoTextView: TextView
+
     private val LOCATION_PERMISSION_REQUEST_CODE = 1
-    private var locationUpdateState = false
+    private val locationList = mutableListOf<LatLng>()
+    private var mapReady = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        binding = ActivityMapsBinding.inflate(layoutInflater)
-        setContentView(binding.root)
+        try {
+            binding = ActivityMapsBinding.inflate(layoutInflater)
+            setContentView(binding.root)
 
-        // Initialisiere den FusedLocationProvider
-        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+            // Logging für Debugging
+            logMessage("MapsActivity onCreate gestartet")
 
-        // Erstelle die LocationRequest-Einstellungen
-        createLocationRequest()
+            // Initialisiere den TrackingManager
+            trackingManager = TrackingManager.getInstance(applicationContext)
 
-        // Erstelle den LocationCallback für Updates
-        locationCallback = object : LocationCallback() {
-            override fun onLocationResult(locationResult: LocationResult) {
-                locationResult.locations.forEach { location ->
-                    // Aktualisiere die Karte mit dem neuen Standort
-                    val currentPosition = LatLng(location.latitude, location.longitude)
-                    mMap.clear() // Entferne alte Marker
-                    mMap.addMarker(MarkerOptions().position(currentPosition).title("Mein Standort"))
-                    // Nur beim ersten Update zoomen
-                    if (!locationUpdateState) {
-                        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(currentPosition, 15f))
-                        locationUpdateState = true
-                    }
-                }
+            // Finde das TextView für Tracking-Modus-Info
+            trackingModeInfoTextView = binding.trackingModeInfo
+
+            // Aktualisiere die Tracking-Info
+            updateTrackingInfo()
+
+            // Beobachte Änderungen am Tracking-Status
+            setupObservers()
+
+            // Zurück-Button
+            binding.backButton.setOnClickListener {
+                logMessage("Zurück-Button geklickt")
+                finish()
             }
+
+            // Lade die Karte
+            val mapFragment = supportFragmentManager
+                .findFragmentById(R.id.map) as? SupportMapFragment
+
+            if (mapFragment != null) {
+                logMessage("MapFragment gefunden, rufe getMapAsync auf")
+                mapFragment.getMapAsync(this)
+                Toast.makeText(this, "Karte wird geladen...", Toast.LENGTH_SHORT).show()
+            } else {
+                logMessage("FEHLER: MapFragment ist null")
+                Toast.makeText(this, "Fehler beim Laden der Karte", Toast.LENGTH_LONG).show()
+            }
+        } catch (e: Exception) {
+            logMessage("FEHLER in onCreate: ${e.message}")
+            Toast.makeText(this, "Fehler beim Initialisieren: ${e.message}", Toast.LENGTH_LONG).show()
         }
-
-        // Finde den Zurück-Button und setze den Click-Listener
-        binding.backButton.setOnClickListener {
-            finish() // Schließt die aktuelle Activity und kehrt zur vorherigen zurück
-        }
-
-        // Obtain the SupportMapFragment and get notified when the map is ready to be used.
-        val mapFragment = supportFragmentManager
-            .findFragmentById(R.id.map) as SupportMapFragment
-        mapFragment.getMapAsync(this)
-
-        // Performance-Optimierung: Die Karte wird asynchron geladen
-        Toast.makeText(this, "Karte wird geladen...", Toast.LENGTH_SHORT).show()
     }
 
-    private fun createLocationRequest() {
-        locationRequest = LocationRequest.create().apply {
-            interval = 10000 // 10 Sekunden zwischen Updates
-            fastestInterval = 5000 // Schnellste Update-Rate
-            priority = LocationRequest.PRIORITY_HIGH_ACCURACY
+    private fun setupObservers() {
+        try {
+            // Beobachte Standortänderungen
+            trackingManager.locationData.observe(this) { location ->
+                if (mapReady && trackingManager.isTracking.value == true) {
+                    logMessage("Neuer Standort erhalten: ${location.latitude}, ${location.longitude}")
+                    updateMap(location.latitude, location.longitude)
+                }
+            }
+
+            // Beobachte Tracking-Status
+            trackingManager.isTracking.observe(this) { isTracking ->
+                updateTrackingInfo()
+            }
+
+            // Beobachte Tracking-Modus
+            trackingManager.currentMode.observe(this) { mode ->
+                updateTrackingInfo()
+            }
+
+            // Beobachte Fehler
+            trackingManager.error.observe(this) { error ->
+                logMessage("Tracking Fehler: $error")
+                Toast.makeText(this, error, Toast.LENGTH_SHORT).show()
+            }
+        } catch (e: Exception) {
+            logMessage("FEHLER in setupObservers: ${e.message}")
+        }
+    }
+
+    private fun updateTrackingInfo() {
+        try {
+            val isTracking = trackingManager.isTracking.value ?: false
+            val mode = trackingManager.currentMode.value?.displayName ?: "Unbekannt"
+
+            val trackingStatus = if (isTracking) "aktiv" else "inaktiv"
+            trackingModeInfoTextView.text = "$mode: $trackingStatus"
+
+            logMessage("Tracking-Info aktualisiert: $mode ist $trackingStatus")
+        } catch (e: Exception) {
+            logMessage("FEHLER in updateTrackingInfo: ${e.message}")
         }
     }
 
     override fun onMapReady(googleMap: GoogleMap) {
-        mMap = googleMap
+        try {
+            logMessage("onMapReady aufgerufen")
+            mMap = googleMap
+            mapReady = true
 
-        // Prüfe und fordere Berechtigungen an, falls nötig
-        if (checkLocationPermission()) {
-            enableMyLocation()
-            startLocationUpdates()
-        } else {
-            requestLocationPermission()
+            // Standardansicht auf Deutschland setzen
+            val germany = LatLng(51.1657, 10.4515)
+            mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(germany, 5.5f))
+
+            // Aktiviere My Location Button nur, wenn wir Berechtigungen haben
+            if (checkLocationPermission()) {
+                enableMyLocation()
+
+                // Wenn Tracking aktiv ist, zeige aktuellen Standort
+                if (trackingManager.isTracking.value == true) {
+                    trackingManager.getLastLocation()?.let { location ->
+                        logMessage("Letzter bekannter Standort: ${location.latitude}, ${location.longitude}")
+                        updateMap(location.latitude, location.longitude)
+                    }
+                }
+            } else {
+                logMessage("Keine Standortberechtigungen vorhanden")
+                requestLocationPermission()
+            }
+        } catch (e: Exception) {
+            logMessage("FEHLER in onMapReady: ${e.message}")
+            Toast.makeText(this, "Fehler beim Initialisieren der Karte: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun updateMap(latitude: Double, longitude: Double) {
+        if (!mapReady) return
+
+        try {
+            val currentPosition = LatLng(latitude, longitude)
+
+            // Füge Punkt zur Liste hinzu
+            locationList.add(currentPosition)
+
+            // Zeichne den Track, falls mehr als ein Punkt vorhanden ist
+            if (locationList.size > 1) {
+                mMap.addPolyline(
+                    PolylineOptions()
+                        .add(locationList[locationList.size - 2], locationList[locationList.size - 1])
+                        .width(5f)
+                        .color(Color.BLUE)
+                )
+            }
+
+            mMap.clear()
+            mMap.addMarker(MarkerOptions().position(currentPosition).title("AlgoLocation"))
+
+            // Nur beim ersten Punkt die Kamera bewegen (oder nach Bedarf)
+            if (locationList.size == 1) {
+                mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(currentPosition, 15f))
+            }
+
+            // Zeichne die gesamte Route neu, da wir die Karte gecleared haben
+            if (locationList.size > 1) {
+                val polylineOptions = PolylineOptions()
+                    .width(5f)
+                    .color(Color.BLUE)
+
+                for (point in locationList) {
+                    polylineOptions.add(point)
+                }
+
+                mMap.addPolyline(polylineOptions)
+            }
+        } catch (e: Exception) {
+            logMessage("FEHLER in updateMap: ${e.message}")
         }
     }
 
@@ -111,6 +214,16 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
         )
     }
 
+    private fun enableMyLocation() {
+        try {
+            // Aktiviere den "Mein Standort"-Button auf der Karte
+            mMap.isMyLocationEnabled = true
+        } catch (e: SecurityException) {
+            logMessage("FEHLER in enableMyLocation: ${e.message}")
+            Toast.makeText(this, "Standortberechtigung erforderlich", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<out String>,
@@ -119,52 +232,22 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == LOCATION_PERMISSION_REQUEST_CODE) {
             if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                logMessage("Standortberechtigungen erteilt")
                 enableMyLocation()
-                startLocationUpdates()
             } else {
-                // Berechtigungen wurden verweigert, zeige einen Default-Standort
-                val defaultLocation = LatLng(0.0, 0.0)
-                mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(defaultLocation, 2f))
-                Toast.makeText(this, "Standortberechtigungen verweigert", Toast.LENGTH_SHORT).show()
+                logMessage("Standortberechtigungen verweigert")
+                Toast.makeText(this, "Ohne Standortberechtigungen kann der aktuelle Standort nicht angezeigt werden", Toast.LENGTH_LONG).show()
             }
         }
     }
 
-    private fun enableMyLocation() {
-        try {
-            // Aktiviere den "Mein Standort"-Button auf der Karte
-            mMap.isMyLocationEnabled = true
-        } catch (e: SecurityException) {
-            // Berechtigungen wurden nicht erteilt
-            Toast.makeText(this, "Standortberechtigung erforderlich", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun startLocationUpdates() {
-        if (checkLocationPermission()) {
-            try {
-                fusedLocationClient.requestLocationUpdates(
-                    locationRequest,
-                    locationCallback,
-                    Looper.getMainLooper() // Verwende den Hauptthread-Looper für Callbacks
-                )
-            } catch (e: SecurityException) {
-                Toast.makeText(this, "Standortberechtigung nicht erteilt", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
-    override fun onPause() {
-        super.onPause()
-        // Stoppe Updates, wenn die Activity nicht im Vordergrund ist
-        fusedLocationClient.removeLocationUpdates(locationCallback)
+    private fun logMessage(message: String) {
+        // In echter App durch echtes Logging ersetzen
+        println("LBSApp - MapsActivity: $message")
     }
 
     override fun onResume() {
         super.onResume()
-        // Starte Updates, wenn die Activity wieder im Vordergrund ist
-        if (checkLocationPermission() && ::mMap.isInitialized) {
-            startLocationUpdates()
-        }
+        updateTrackingInfo()
     }
 }
