@@ -1,6 +1,8 @@
 package com.example.lbsapp.tracking.modes
 
+import com.example.lbsapp.database.GeofenceEntity
 import android.Manifest
+import android.app.Application
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
@@ -14,6 +16,7 @@ import com.google.android.gms.location.*
 import java.util.*
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
+import com.example.lbsapp.geofence.GeofenceRepository
 
 /**
  * Implementierung des Trackings mit Geofencing
@@ -190,4 +193,71 @@ class GeofencingTracker(context: Context) : BaseTracker(context) {
             addGeofences()
         }
     }
+
+    private val repository: GeofenceRepository by lazy{
+        GeofenceRepository((context.applicationContext as Application))
+            }
+    suspend fun addCustomGeofence(name: String, latitude: Double, longitude: Double, radius: Float): Long {
+        val geofenceId = repository.addGeofence(name, latitude, longitude, radius)
+
+        // Erstelle das tatsächliche Geofence für die API
+        val geofence = Geofence.Builder()
+            .setRequestId(geofenceId.toString()) // Verwende die DB-ID als requestId
+            .setCircularRegion(latitude, longitude, radius)
+            .setExpirationDuration(Geofence.NEVER_EXPIRE)
+            .setTransitionTypes(Geofence.GEOFENCE_TRANSITION_ENTER or Geofence.GEOFENCE_TRANSITION_EXIT)
+            .build()
+
+        geofenceList.add(geofence)
+
+        // Wenn Tracking aktiv ist, aktualisiere die Geofences
+        if (_isTracking.value == true) {
+            removeAllGeofences()
+            addGeofences()
+        }
+
+        return geofenceId
+    }
+
+    // Methode zum Entfernen eines benutzerdefinierten Geofences
+    suspend fun removeCustomGeofence(geofence: GeofenceEntity) {
+        repository.deleteGeofence(geofence)
+
+        // Entferne aus der lokalen Liste
+        geofenceList.removeAll { it.requestId == geofence.id.toString() }
+
+        // Wenn Tracking aktiv ist, aktualisiere die Geofences
+        if (_isTracking.value == true) {
+            removeAllGeofences()
+            addGeofences()
+        }
+    }
+
+    private fun removeAllGeofences() {
+        try {
+            geofencingClient.removeGeofences(geofencePendingIntent)
+        } catch (e: SecurityException) {
+            _error.postValue("Keine Berechtigung für Standortdaten: ${e.message}")
+        }
+    }
+
+    // Methode zum Laden aller gespeicherten Geofences beim Start
+    suspend fun loadSavedGeofences() {
+        geofenceList.clear()
+
+        // Lade alle Geofences aus der Datenbank
+        val geofences = repository.allGeofences.value ?: return
+
+        for (geofence in geofences) {
+            val gf = Geofence.Builder()
+                .setRequestId(geofence.id.toString())
+                .setCircularRegion(geofence.latitude, geofence.longitude, geofence.radius)
+                .setExpirationDuration(Geofence.NEVER_EXPIRE)
+                .setTransitionTypes(Geofence.GEOFENCE_TRANSITION_ENTER or Geofence.GEOFENCE_TRANSITION_EXIT)
+                .build()
+
+            geofenceList.add(gf)
+        }
+    }
+
 }

@@ -194,6 +194,13 @@
             app:layout_constraintStart_toEndOf="@+id/startStopButton"
             app:layout_constraintTop_toTopOf="@+id/startStopButton"
             app:layout_constraintWidth_percent="0.48" />
+        <Button
+            android:id="@+id/manageGeofencesButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Geofences verwalten"
+            app:layout_constraintTop_toBottomOf="@id/openMapButton"
+            android:layout_marginTop="16dp" />
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 </layout>

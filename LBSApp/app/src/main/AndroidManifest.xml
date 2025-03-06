@@ -35,6 +35,15 @@
             android:label="Dashboard" />
 
         <activity
+            android:name=".geofence.GeofenceManagementActivity"
+            android:exported="false"
+            android:label="Geofence-Verwaltung" />
+        <activity
+            android:name=".geofence.GeofenceDetailsActivity"
+            android:exported="false"
+            android:label="Geofence-Details" />
+
+        <activity
             android:name=".MainActivity"
             android:exported="true"
             android:label="LBSApp"

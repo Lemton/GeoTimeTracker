@@ -1,199 +1,362 @@
 package com.karte.lbsapp
 
 import android.Manifest
+import android.app.PendingIntent
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.os.Build
 import android.os.Bundle
-import android.widget.TextView
+import android.util.Log
+import android.view.LayoutInflater
+import android.view.View
+import android.widget.EditText
+import android.widget.SeekBar
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import com.example.lbsapp.R
 import com.example.lbsapp.databinding.ActivityMapsBinding
+import com.example.lbsapp.repository.GeofenceRepository
 import com.example.lbsapp.tracking.TrackingManager
+import com.example.lbsapp.tracking.receivers.GeofenceBroadcastReceiver
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.Geofence
+import com.google.android.gms.location.GeofencingClient
+import com.google.android.gms.location.GeofencingRequest
+import com.google.android.gms.location.LocationServices
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.OnMapReadyCallback
 import com.google.android.gms.maps.SupportMapFragment
+import com.google.android.gms.maps.model.Circle
+import com.google.android.gms.maps.model.CircleOptions
 import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.Marker
 import com.google.android.gms.maps.model.MarkerOptions
-import com.google.android.gms.maps.model.PolylineOptions
+import kotlinx.coroutines.launch
 
 class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
 
     private lateinit var mMap: GoogleMap
     private lateinit var binding: ActivityMapsBinding
+    private lateinit var fusedLocationClient: FusedLocationProviderClient
+    private lateinit var geofencingClient: GeofencingClient
     private lateinit var trackingManager: TrackingManager
-    private lateinit var trackingModeInfoTextView: TextView
-
+    private var selectedLocation: LatLng? = null
+    private var tempMarker: Marker? = null
+    private var tempCircle: Circle? = null
+    private var currentRadius: Float = 100f // Standardradius
     private val LOCATION_PERMISSION_REQUEST_CODE = 1
-    private val locationList = mutableListOf<LatLng>()
-    private var mapReady = false
+    private val TAG = "MapsActivity"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        try {
-            binding = ActivityMapsBinding.inflate(layoutInflater)
-            setContentView(binding.root)
+        binding = ActivityMapsBinding.inflate(layoutInflater)
+        setContentView(binding.root)
 
-            // Logging für Debugging
-            logMessage("MapsActivity onCreate gestartet")
+        // Initialisiere den FusedLocationProvider
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
 
-            // Initialisiere den TrackingManager
-            trackingManager = TrackingManager.getInstance(applicationContext)
+        // Initialisiere den GeofencingClient
+        geofencingClient = LocationServices.getGeofencingClient(this)
 
-            // Finde das TextView für Tracking-Modus-Info
-            trackingModeInfoTextView = binding.trackingModeInfo
+        // Initialisiere den TrackingManager
+        trackingManager = TrackingManager.getInstance(this)
 
-            // Aktualisiere die Tracking-Info
-            updateTrackingInfo()
-
-            // Beobachte Änderungen am Tracking-Status
-            setupObservers()
-
-            // Zurück-Button
-            binding.backButton.setOnClickListener {
-                logMessage("Zurück-Button geklickt")
-                finish()
-            }
-
-            // Lade die Karte
-            val mapFragment = supportFragmentManager
-                .findFragmentById(R.id.map) as? SupportMapFragment
-
-            if (mapFragment != null) {
-                logMessage("MapFragment gefunden, rufe getMapAsync auf")
-                mapFragment.getMapAsync(this)
-                Toast.makeText(this, "Karte wird geladen...", Toast.LENGTH_SHORT).show()
-            } else {
-                logMessage("FEHLER: MapFragment ist null")
-                Toast.makeText(this, "Fehler beim Laden der Karte", Toast.LENGTH_LONG).show()
-            }
-        } catch (e: Exception) {
-            logMessage("FEHLER in onCreate: ${e.message}")
-            Toast.makeText(this, "Fehler beim Initialisieren: ${e.message}", Toast.LENGTH_LONG).show()
+        // Zurück-Button
+        binding.backButton.setOnClickListener {
+            finish()
         }
-    }
 
-    private fun setupObservers() {
-        try {
-            // Beobachte Standortänderungen
-            trackingManager.locationData.observe(this) { location ->
-                if (mapReady && trackingManager.isTracking.value == true) {
-                    logMessage("Neuer Standort erhalten: ${location.latitude}, ${location.longitude}")
-                    updateMap(location.latitude, location.longitude)
-                }
-            }
-
-            // Beobachte Tracking-Status
-            trackingManager.isTracking.observe(this) { isTracking ->
-                updateTrackingInfo()
-            }
-
-            // Beobachte Tracking-Modus
-            trackingManager.currentMode.observe(this) { mode ->
-                updateTrackingInfo()
-            }
-
-            // Beobachte Fehler
-            trackingManager.error.observe(this) { error ->
-                logMessage("Tracking Fehler: $error")
-                Toast.makeText(this, error, Toast.LENGTH_SHORT).show()
-            }
-        } catch (e: Exception) {
-            logMessage("FEHLER in setupObservers: ${e.message}")
+        // Geofence-Erstellungs-Button (zunächst unsichtbar)
+        binding.createGeofenceButton.visibility = View.GONE
+        binding.createGeofenceButton.setOnClickListener {
+            showGeofenceDialog()
         }
-    }
 
-    private fun updateTrackingInfo() {
-        try {
-            val isTracking = trackingManager.isTracking.value ?: false
-            val mode = trackingManager.currentMode.value?.displayName ?: "Unbekannt"
+        // SeekBar für den Radius
+        binding.radiusSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                // Skalieren auf sinnvollen Bereich (20m bis 500m)
+                currentRadius = 20f + progress * 4.8f
+                binding.radiusTextView.text = "${currentRadius.toInt()}m"
 
-            val trackingStatus = if (isTracking) "aktiv" else "inaktiv"
-            trackingModeInfoTextView.text = "$mode: $trackingStatus"
+                // Aktualisiere den temporären Kreis
+                updateTempCircle()
+            }
 
-            logMessage("Tracking-Info aktualisiert: $mode ist $trackingStatus")
-        } catch (e: Exception) {
-            logMessage("FEHLER in updateTrackingInfo: ${e.message}")
-        }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+        })
+
+        // Radius-Controls zunächst verstecken
+        binding.radiusControls.visibility = View.GONE
+
+        // Initialisiere die Karte
+        val mapFragment = supportFragmentManager
+            .findFragmentById(R.id.map) as SupportMapFragment
+        mapFragment.getMapAsync(this)
     }
 
     override fun onMapReady(googleMap: GoogleMap) {
-        try {
-            logMessage("onMapReady aufgerufen")
-            mMap = googleMap
-            mapReady = true
+        mMap = googleMap
 
-            // Standardansicht auf Deutschland setzen
-            val germany = LatLng(51.1657, 10.4515)
-            mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(germany, 5.5f))
+        // Karten-Einstellungen
+        if (checkLocationPermission()) {
+            mMap.isMyLocationEnabled = true
+            mMap.uiSettings.isMyLocationButtonEnabled = true
 
-            // Aktiviere My Location Button nur, wenn wir Berechtigungen haben
-            if (checkLocationPermission()) {
-                enableMyLocation()
-
-                // Wenn Tracking aktiv ist, zeige aktuellen Standort
-                if (trackingManager.isTracking.value == true) {
-                    trackingManager.getLastLocation()?.let { location ->
-                        logMessage("Letzter bekannter Standort: ${location.latitude}, ${location.longitude}")
-                        updateMap(location.latitude, location.longitude)
-                    }
+            // Zeige aktuelle Position
+            fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+                location?.let {
+                    val currentPosition = LatLng(it.latitude, it.longitude)
+                    mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(currentPosition, 15f))
                 }
-            } else {
-                logMessage("Keine Standortberechtigungen vorhanden")
-                requestLocationPermission()
             }
-        } catch (e: Exception) {
-            logMessage("FEHLER in onMapReady: ${e.message}")
-            Toast.makeText(this, "Fehler beim Initialisieren der Karte: ${e.message}", Toast.LENGTH_LONG).show()
+        } else {
+            requestLocationPermission()
+        }
+
+        // Zeige bestehende Geofences an
+        showExistingGeofences()
+
+        // Klick-Listener für neue Geofences
+        mMap.setOnMapClickListener { latLng ->
+            selectedLocation = latLng
+
+            // Entferne alten temporären Marker und Kreis
+            tempMarker?.remove()
+            tempCircle?.remove()
+
+            // Füge neuen temporären Marker hinzu
+            tempMarker = mMap.addMarker(
+                MarkerOptions()
+                    .position(latLng)
+                    .title("Neuer Geofence")
+                    .draggable(true)
+            )
+
+            // Zeige den Radius-Kreis
+            tempCircle = mMap.addCircle(
+                CircleOptions()
+                    .center(latLng)
+                    .radius(currentRadius.toDouble())
+                    .strokeColor(Color.RED)
+                    .fillColor(Color.argb(70, 255, 0, 0))
+            )
+
+            // Zeige Radius-Controls und Erstellen-Button
+            binding.radiusControls.visibility = View.VISIBLE
+            binding.createGeofenceButton.visibility = View.VISIBLE
+        }
+
+        // Drag-Listener für Marker
+        mMap.setOnMarkerDragListener(object : GoogleMap.OnMarkerDragListener {
+            override fun onMarkerDragStart(marker: Marker) {}
+
+            override fun onMarkerDrag(marker: Marker) {
+                // Aktualisiere die Position des Kreises während des Ziehens
+                selectedLocation = marker.position
+                updateTempCircle()
+            }
+
+            override fun onMarkerDragEnd(marker: Marker) {
+                selectedLocation = marker.position
+                updateTempCircle()
+            }
+        })
+    }
+
+    private fun updateTempCircle() {
+        selectedLocation?.let { location ->
+            tempCircle?.remove()
+            tempCircle = mMap.addCircle(
+                CircleOptions()
+                    .center(location)
+                    .radius(currentRadius.toDouble())
+                    .strokeColor(Color.RED)
+                    .fillColor(Color.argb(70, 255, 0, 0))
+            )
         }
     }
 
-    private fun updateMap(latitude: Double, longitude: Double) {
-        if (!mapReady) return
+    private fun showExistingGeofences() {
+        val geofenceRepository = GeofenceRepository(application)
+        geofenceRepository.allGeofences.observe(this) { geofences ->
+            // Karte leeren (nur Geofences, nicht den temporären Marker)
+            mMap.clear()
+            tempMarker = null
+            tempCircle = null
 
-        try {
-            val currentPosition = LatLng(latitude, longitude)
+            // Bestehende Geofences anzeigen
+            for (geofence in geofences) {
+                val position = LatLng(geofence.latitude, geofence.longitude)
 
-            // Füge Punkt zur Liste hinzu
-            locationList.add(currentPosition)
+                // Marker für den Geofence
+                mMap.addMarker(
+                    MarkerOptions()
+                        .position(position)
+                        .title(geofence.name)
+                )
 
-            // Zeichne den Track, falls mehr als ein Punkt vorhanden ist
-            if (locationList.size > 1) {
-                mMap.addPolyline(
-                    PolylineOptions()
-                        .add(locationList[locationList.size - 2], locationList[locationList.size - 1])
-                        .width(5f)
-                        .color(Color.BLUE)
+                // Kreis für den Radius
+                mMap.addCircle(
+                    CircleOptions()
+                        .center(position)
+                        .radius(geofence.radius.toDouble())
+                        .strokeColor(Color.BLUE)
+                        .fillColor(Color.argb(70, 0, 0, 255))
                 )
             }
 
-            mMap.clear()
-            mMap.addMarker(MarkerOptions().position(currentPosition).title("AlgoLocation"))
+            // Temporären Marker und Kreis neu hinzufügen, falls vorhanden
+            selectedLocation?.let { location ->
+                tempMarker = mMap.addMarker(
+                    MarkerOptions()
+                        .position(location)
+                        .title("Neuer Geofence")
+                        .draggable(true)
+                )
 
-            // Nur beim ersten Punkt die Kamera bewegen (oder nach Bedarf)
-            if (locationList.size == 1) {
-                mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(currentPosition, 15f))
+                tempCircle = mMap.addCircle(
+                    CircleOptions()
+                        .center(location)
+                        .radius(currentRadius.toDouble())
+                        .strokeColor(Color.RED)
+                        .fillColor(Color.argb(70, 255, 0, 0))
+                )
             }
+        }
+    }
 
-            // Zeichne die gesamte Route neu, da wir die Karte gecleared haben
-            if (locationList.size > 1) {
-                val polylineOptions = PolylineOptions()
-                    .width(5f)
-                    .color(Color.BLUE)
+    private fun showGeofenceDialog() {
+        selectedLocation?.let { location ->
+            val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_name_geofence, null)
+            val nameEditText = dialogView.findViewById<EditText>(R.id.nameEditText)
 
-                for (point in locationList) {
-                    polylineOptions.add(point)
+            AlertDialog.Builder(this)
+                .setTitle("Geofence benennen")
+                .setView(dialogView)
+                .setPositiveButton("Erstellen") { _, _ ->
+                    val name = nameEditText.text.toString()
+
+                    if (name.isNotBlank()) {
+                        // Geofence erstellen
+                        val geofenceRepository = GeofenceRepository(application)
+                        lifecycleScope.launch {
+                            val geofenceId = geofenceRepository.addGeofence(
+                                name,
+                                location.latitude,
+                                location.longitude,
+                                currentRadius
+                            )
+
+                            // Geofence beim GeofencingClient registrieren
+                            addGeofenceToMonitoring(
+                                geofenceId,
+                                location.latitude,
+                                location.longitude,
+                                currentRadius
+                            )
+
+                            // UI zurücksetzen
+                            runOnUiThread {
+                                selectedLocation = null
+                                tempMarker = null
+                                tempCircle = null
+                                binding.radiusControls.visibility = View.GONE
+                                binding.createGeofenceButton.visibility = View.GONE
+
+                                // Aktualisiere die Anzeige
+                                showExistingGeofences()
+
+                                Toast.makeText(this@MapsActivity, "Geofence '$name' erstellt", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    } else {
+                        Toast.makeText(this, "Bitte gib einen Namen ein", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                .setNegativeButton("Abbrechen") { _, _ ->
+                    // Abbrechen - nichts tun
+                }
+                .show()
+        }
+    }
+
+    private fun addGeofenceToMonitoring(
+        geofenceId: Long,
+        latitude: Double,
+        longitude: Double,
+        radius: Float
+    ) {
+        Log.d(TAG, "Füge Geofence $geofenceId zum Monitoring hinzu (lat: $latitude, lng: $longitude, radius: $radius)")
+
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            Log.e(TAG, "Keine Berechtigung für Geofencing")
+            return
+        }
+
+        try {
+            // Alle vorhandenen Geofences entfernen
+            geofencingClient.removeGeofences(getPendingIntent())
+                .addOnSuccessListener {
+                    Log.d(TAG, "Alte Geofences entfernt")
+                }
+                .addOnFailureListener { e ->
+                    Log.e(TAG, "Fehler beim Entfernen alter Geofences: ${e.message}")
                 }
 
-                mMap.addPolyline(polylineOptions)
-            }
+            // Erstelle Geofence mit eindeutiger ID
+            val geofence = Geofence.Builder()
+                .setRequestId(geofenceId.toString())
+                .setCircularRegion(latitude, longitude, radius)
+                .setExpirationDuration(Geofence.NEVER_EXPIRE)
+                .setTransitionTypes(Geofence.GEOFENCE_TRANSITION_ENTER or Geofence.GEOFENCE_TRANSITION_EXIT)
+                .setLoiteringDelay(30000) // Optional: 30 Sekunden für DWELL-Ereignisse
+                .build()
+
+            // Erstelle GeofencingRequest
+            val geofencingRequest = GeofencingRequest.Builder()
+                .setInitialTrigger(GeofencingRequest.INITIAL_TRIGGER_ENTER)
+                .addGeofence(geofence)
+                .build()
+
+            // Erstelle eindeutigen PendingIntent für dieses Geofence
+            val pendingIntent = getPendingIntent()
+
+            // Füge Geofence hinzu
+            geofencingClient.addGeofences(geofencingRequest, pendingIntent)
+                .addOnSuccessListener {
+                    Log.d(TAG, "Geofence $geofenceId erfolgreich zum Monitoring hinzugefügt")
+                }
+                .addOnFailureListener { e ->
+                    Log.e(TAG, "Fehler beim Hinzufügen des Geofence $geofenceId: ${e.message}")
+                    Log.e(TAG, "Fehlerdetails: ${e.stackTraceToString()}")
+                }
         } catch (e: Exception) {
-            logMessage("FEHLER in updateMap: ${e.message}")
+            Log.e(TAG, "Unerwarteter Fehler im Geofencing: ${e.message}")
+            Log.e(TAG, "Fehlerdetails: ${e.stackTraceToString()}")
         }
+    }
+
+    private fun getPendingIntent(): PendingIntent {
+        Log.d(TAG, "Erstelle PendingIntent für Geofences")
+        val intent = Intent(this, GeofenceBroadcastReceiver::class.java)
+        intent.action = "com.example.lbsapp.ACTION_GEOFENCE_EVENT"
+
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+        } else {
+            PendingIntent.FLAG_UPDATE_CURRENT
+        }
+
+        return PendingIntent.getBroadcast(this, 0, intent, flags)
     }
 
     private fun checkLocationPermission(): Boolean {
@@ -208,20 +371,11 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
             this,
             arrayOf(
                 Manifest.permission.ACCESS_FINE_LOCATION,
-                Manifest.permission.ACCESS_COARSE_LOCATION
+                Manifest.permission.ACCESS_COARSE_LOCATION,
+                Manifest.permission.ACCESS_BACKGROUND_LOCATION
             ),
             LOCATION_PERMISSION_REQUEST_CODE
         )
-    }
-
-    private fun enableMyLocation() {
-        try {
-            // Aktiviere den "Mein Standort"-Button auf der Karte
-            mMap.isMyLocationEnabled = true
-        } catch (e: SecurityException) {
-            logMessage("FEHLER in enableMyLocation: ${e.message}")
-            Toast.makeText(this, "Standortberechtigung erforderlich", Toast.LENGTH_SHORT).show()
-        }
     }
 
     override fun onRequestPermissionsResult(
@@ -232,22 +386,24 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == LOCATION_PERMISSION_REQUEST_CODE) {
             if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                logMessage("Standortberechtigungen erteilt")
-                enableMyLocation()
+                try {
+                    mMap.isMyLocationEnabled = true
+                    mMap.uiSettings.isMyLocationButtonEnabled = true
+
+                    // Zeige aktuelle Position
+                    fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+                        location?.let {
+                            val currentPosition = LatLng(it.latitude, it.longitude)
+                            mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(currentPosition, 15f))
+                        }
+                    }
+                } catch (e: SecurityException) {
+                    Log.e(TAG, "Berechtigung fehlt trotz Überprüfung: ${e.message}")
+                }
             } else {
-                logMessage("Standortberechtigungen verweigert")
-                Toast.makeText(this, "Ohne Standortberechtigungen kann der aktuelle Standort nicht angezeigt werden", Toast.LENGTH_LONG).show()
+                Log.d(TAG, "Standortberechtigungen verweigert")
+                Toast.makeText(this, "Standortberechtigungen verweigert", Toast.LENGTH_SHORT).show()
             }
         }
-    }
-
-    private fun logMessage(message: String) {
-        // In echter App durch echtes Logging ersetzen
-        println("LBSApp - MapsActivity: $message")
-    }
-
-    override fun onResume() {
-        super.onResume()
-        updateTrackingInfo()
     }
 }

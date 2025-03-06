@@ -1,5 +1,6 @@
 package com.example.lbsapp.dashboard
 
+import com.example.lbsapp.geofence.GeofenceManagementActivity
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -114,6 +115,10 @@ class DashboardActivity : AppCompatActivity() {
         // Karten-Button
         binding.openMapButton.setOnClickListener {
             val intent = Intent(this, MapsActivity::class.java)
+            startActivity(intent)
+        }
+        binding.manageGeofencesButton.setOnClickListener {
+            val intent = Intent(this, GeofenceManagementActivity::class.java)
             startActivity(intent)
         }
     }
@@ -242,4 +247,7 @@ class DashboardActivity : AppCompatActivity() {
         // Status aktualisieren
         binding.isTracking = trackingManager.isTracking.value
     }
+
+
+
 }
