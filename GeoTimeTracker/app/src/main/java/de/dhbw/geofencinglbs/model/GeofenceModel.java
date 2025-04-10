@@ -1,6 +1,7 @@
 package de.dhbw.geofencinglbs.model;
 
 import androidx.room.Entity;
+import androidx.room.Ignore;
 import androidx.room.PrimaryKey;
 
 /**
@@ -27,7 +28,13 @@ public class GeofenceModel {
     // Akkumulierte Aufenthaltszeit in Millisekunden
     private long totalDwellTime;
 
-    // Konstruktor
+    // Leerer Konstruktor für Room
+    public GeofenceModel() {
+        // Room benötigt einen leeren Konstruktor
+    }
+
+    // Konstruktor mit @Ignore für die App-Logik
+    @Ignore
     public GeofenceModel(String name, double latitude, double longitude, float radius) {
         this.name = name;
         this.latitude = latitude;

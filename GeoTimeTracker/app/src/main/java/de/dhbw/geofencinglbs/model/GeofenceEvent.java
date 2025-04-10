@@ -2,6 +2,7 @@ package de.dhbw.geofencinglbs.model;
 
 import androidx.room.Entity;
 import androidx.room.ForeignKey;
+import androidx.room.Ignore;
 import androidx.room.Index;
 import androidx.room.PrimaryKey;
 
@@ -38,14 +39,21 @@ public class GeofenceEvent {
     private boolean isCharging;
     private String networkConnectionType; // WIFI, MOBILE, NONE
 
-    // Konstruktor für einfachste Verwendung
+    // Standardkonstruktor für Room
+    public GeofenceEvent() {
+        // Room benötigt einen leeren Konstruktor
+    }
+
+    // Konstruktor für einfachste Verwendung - mit @Ignore markiert
+    @Ignore
     public GeofenceEvent(long geofenceId, int eventType) {
         this.geofenceId = geofenceId;
         this.eventType = eventType;
         this.timestamp = System.currentTimeMillis();
     }
 
-    // Vollständiger Konstruktor
+    // Vollständiger Konstruktor - mit @Ignore markiert
+    @Ignore
     public GeofenceEvent(long geofenceId, int eventType, long timestamp,
                          double latitude, double longitude, float accuracy,
                          String provider, float batteryLevel, boolean isCharging,
