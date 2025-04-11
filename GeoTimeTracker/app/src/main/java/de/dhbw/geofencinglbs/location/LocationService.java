@@ -55,6 +55,8 @@ public class LocationService extends Service {
     private Location lastLocation;
     private int currentMode = MODE_BALANCED; // Standard-Modus
     private LocationListener locationListener;
+    private String currentProviderDetails = "Initializing...";
+    private long lastUpdateTime = 0;
 
     /**
      * Binder-Klasse für die Service-Verbindung.
@@ -89,6 +91,10 @@ public class LocationService extends Service {
                 for (Location location : locationResult.getLocations()) {
                     // Aktualisiere den letzten bekannten Standort
                     lastLocation = location;
+                    lastUpdateTime = System.currentTimeMillis();
+
+                    // Analysiere den Provider für mehr Details
+                    currentProviderDetails = analyzeProvider(location);
 
                     // Erfasse Metadaten für die Analyse
                     float batteryLevel = DeviceInfoUtil.getBatteryLevel(LocationService.this);
@@ -98,18 +104,66 @@ public class LocationService extends Service {
                     // Logge Standortinformationen
                     Log.d(TAG, String.format("Location update: %.6f, %.6f (Accuracy: %.2fm, Provider: %s, Battery: %.1f%%)",
                             location.getLatitude(), location.getLongitude(),
-                            location.getAccuracy(), location.getProvider(), batteryLevel));
+                            location.getAccuracy(), currentProviderDetails, batteryLevel));
 
                     // Benachrichtige Listener (falls vorhanden)
                     if (locationListener != null) {
-                        locationListener.onLocationChanged(location, batteryLevel, isCharging, networkType);
+                        locationListener.onLocationChanged(location, batteryLevel, isCharging, networkType, currentProviderDetails);
                     }
+
+                    // Broadcast zur App-weiten Benachrichtigung
+                    Intent updateIntent = new Intent("de.dhbw.geofencinglbs.LOCATION_UPDATED");
+                    updateIntent.putExtra("accuracy", location.getAccuracy());
+                    updateIntent.putExtra("provider", currentProviderDetails);
+                    sendBroadcast(updateIntent);
 
                     // Adaptive Anpassung des Standortmodus basierend auf Batteriestatus
                     adaptLocationUpdateRate(batteryLevel, isCharging);
                 }
             }
         };
+    }
+
+    /**
+     * Analysiert den Provider und gibt detaillierte Informationen zurück
+     */
+    private String analyzeProvider(Location location) {
+        String baseProvider = location.getProvider();
+        StringBuilder details = new StringBuilder(baseProvider);
+
+        // Zusätzliche Informationen je nach Provider-Typ
+        if ("gps".equals(baseProvider)) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                details.append(" (Satellites: ").append(location.getExtras() != null &&
+                        location.getExtras().containsKey("satellites") ?
+                        location.getExtras().getInt("satellites") : "unknown").append(")");
+            }
+        } else if ("network".equals(baseProvider)) {
+            details.append(" (").append(DeviceInfoUtil.getNetworkConnectionType(this)).append(")");
+        } else if ("fused".equals(baseProvider)) {
+            // Fused provider kombiniert verschiedene Quellen
+            details.append(" (Hybrid)");
+
+            // Versuche tiefere Sensor-Informationen zu erhalten
+            if (location.getExtras() != null) {
+                for (String key : location.getExtras().keySet()) {
+                    details.append(", ").append(key).append("=").append(location.getExtras().get(key));
+                }
+            }
+        }
+
+        // Füge Genauigkeitsklasse hinzu
+        if (location.getAccuracy() < 10) {
+            details.append(" [Hochpräzise]");
+        } else if (location.getAccuracy() < 50) {
+            details.append(" [Gut]");
+        } else if (location.getAccuracy() < 100) {
+            details.append(" [Mittel]");
+        } else {
+            details.append(" [Grob]");
+        }
+
+        return details.toString();
     }
 
     /**
@@ -159,6 +213,12 @@ public class LocationService extends Service {
         }
 
         Log.d(TAG, "Location mode changed to: " + getModeString());
+
+        // Aktualisiere die Notification
+        NotificationManager notificationManager = getSystemService(NotificationManager.class);
+        if (notificationManager != null) {
+            notificationManager.notify(NOTIFICATION_ID, createNotification());
+        }
     }
 
     /**
@@ -263,10 +323,15 @@ public class LocationService extends Service {
         }
         PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, notificationIntent, flags);
 
+        String contentText = "Modus: " + getModeString();
+        if (lastLocation != null) {
+            contentText += " | Genauigkeit: " + String.format("%.1f m", lastLocation.getAccuracy());
+        }
+
         return new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle("Standorterfassung aktiv")
-                .setContentText("Modus: " + getModeString())
-                .setSmallIcon(R.drawable.ic_notification) // Diese Ressource muss erstellt werden
+                .setContentText(contentText)
+                .setSmallIcon(R.drawable.ic_notification)
                 .setContentIntent(pendingIntent)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
                 .build();
@@ -314,9 +379,24 @@ public class LocationService extends Service {
     }
 
     /**
+     * Gibt die Zeit der letzten Aktualisierung zurück
+     */
+    public long getLastUpdateTime() {
+        return lastUpdateTime;
+    }
+
+    /**
+     * Gibt die Details zum aktuellen Provider zurück
+     */
+    public String getCurrentProviderDetails() {
+        return currentProviderDetails;
+    }
+
+    /**
      * Interface für Standortaktualisierungen.
      */
     public interface LocationListener {
-        void onLocationChanged(Location location, float batteryLevel, boolean isCharging, String networkType);
+        void onLocationChanged(Location location, float batteryLevel, boolean isCharging,
+                               String networkType, String providerDetails);
     }
 }

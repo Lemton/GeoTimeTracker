@@ -39,4 +39,10 @@ public interface GeofenceDao {
 
     @Query("SELECT * FROM geofences WHERE isActive = 1")
     List<GeofenceModel> getActiveGeofences();
+
+    @Query("SELECT * FROM geofences WHERE isActive = 1")
+    List<GeofenceModel> getActiveGeofencesSync();
+
+    @Query("SELECT * FROM geofences WHERE id = :geofenceId LIMIT 1")
+    GeofenceModel getGeofenceByIdSync(long geofenceId);
 }

@@ -62,6 +62,11 @@ public class GeofenceBroadcastReceiver extends BroadcastReceiver {
             for (Geofence geofence : triggeringGeofences) {
                 processGeofenceTransition(context, geofence, geofenceTransition, geofencingEvent.getTriggeringLocation());
             }
+
+            // Broadcast senden für Live-Updates in der UI
+            Intent broadcastIntent = new Intent("de.dhbw.geofencinglbs.GEOFENCE_TRANSITION");
+            broadcastIntent.putExtra("transition_type", geofenceTransition);
+            context.sendBroadcast(broadcastIntent);
         } else {
             Log.e(TAG, "Unknown geofence transition type: " + geofenceTransition);
         }
@@ -132,5 +137,12 @@ public class GeofenceBroadcastReceiver extends BroadcastReceiver {
 
         // Benachrichtigung erstellen
         NotificationHelper.showGeofenceNotification(context, geofenceId, transitionType, location);
+
+        // Update des Geofence-Modells mit Ein-/Austrittszeiten
+        if (transitionType == Geofence.GEOFENCE_TRANSITION_ENTER) {
+            repository.updateGeofenceEntryTime(geofenceId, System.currentTimeMillis());
+        } else if (transitionType == Geofence.GEOFENCE_TRANSITION_EXIT) {
+            repository.updateGeofenceExitTime(geofenceId, System.currentTimeMillis());
+        }
     }
 }

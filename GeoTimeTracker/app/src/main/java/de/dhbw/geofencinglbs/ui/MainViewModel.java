@@ -42,7 +42,7 @@ public class MainViewModel extends AndroidViewModel {
         recentEvents = repository.getRecentEvents(50);
 
         // Standard-Statusmeldung
-        statusMessage.setValue("Bereit");
+        statusMessage.postValue("Bereit");
     }
 
     /**
@@ -70,7 +70,7 @@ public class MainViewModel extends AndroidViewModel {
      * Setzt den aktuellen Standort.
      */
     public void setCurrentLocation(Location location) {
-        currentLocation.setValue(location);
+        currentLocation.postValue(location);
     }
 
     /**
@@ -98,16 +98,47 @@ public class MainViewModel extends AndroidViewModel {
      * Aktualisiert den Gerätestatus.
      */
     public void updateDeviceStatus(float batteryLevel, boolean isCharging, String networkType) {
-        DeviceStatus status = new DeviceStatus(batteryLevel, isCharging, networkType);
-        deviceStatus.setValue(status);
+        DeviceStatus status = deviceStatus.getValue();
+        if (status == null) {
+            status = new DeviceStatus();
+        }
+        status.setBatteryLevel(batteryLevel);
+        status.setCharging(isCharging);
+        status.setNetworkType(networkType);
+        deviceStatus.postValue(status);
+    }
+
+    /**
+     * Erweiterte Version: Aktualisiert den Gerätestatus mit Provider-Details.
+     */
+    public void updateDeviceStatus(float batteryLevel, boolean isCharging, String networkType, String providerDetails) {
+        DeviceStatus status = deviceStatus.getValue();
+        if (status == null) {
+            status = new DeviceStatus();
+        }
+        status.setBatteryLevel(batteryLevel);
+        status.setCharging(isCharging);
+        status.setNetworkType(networkType);
+        status.setProviderDetails(providerDetails);
+        deviceStatus.postValue(status);
+    }
+
+    /**
+     * Aktualisiert die Geofence- und Ereignis-Daten.
+     */
+    public void refreshGeofenceData() {
+        isLoading.postValue(true);
+        repository.refreshGeofences();
+        repository.refreshEvents();
+        isLoading.postValue(false);
     }
 
     /**
      * Fügt einen neuen Geofence hinzu.
      */
     public void addGeofence(String name, double latitude, double longitude, float radius) {
-        isLoading.setValue(true);
-        statusMessage.setValue("Füge Geofence hinzu...");
+        isLoading.postValue(true);
+        statusMessage.postValue("Füge Geofence hinzu...");
 
         GeofenceModel geofence = new GeofenceModel(name, latitude, longitude, radius);
         repository.insert(geofence);
@@ -123,8 +154,8 @@ public class MainViewModel extends AndroidViewModel {
      * Aktualisiert einen vorhandenen Geofence.
      */
     public void updateGeofence(GeofenceModel geofence) {
-        isLoading.setValue(true);
-        statusMessage.setValue("Aktualisiere Geofence...");
+        isLoading.postValue(true);
+        statusMessage.postValue("Aktualisiere Geofence...");
 
         repository.update(geofence);
 
@@ -138,8 +169,8 @@ public class MainViewModel extends AndroidViewModel {
      * Löscht einen Geofence.
      */
     public void deleteGeofence(GeofenceModel geofence) {
-        isLoading.setValue(true);
-        statusMessage.setValue("Lösche Geofence...");
+        isLoading.postValue(true);
+        statusMessage.postValue("Lösche Geofence...");
 
         repository.delete(geofence);
 
@@ -163,23 +194,23 @@ public class MainViewModel extends AndroidViewModel {
     private void registerGeofences(List<GeofenceModel> geofences) {
         if (geofences.isEmpty()) {
             // Es gibt keine Geofences zu registrieren
-            isLoading.setValue(false);
-            statusMessage.setValue("Keine aktiven Geofences");
+            isLoading.postValue(false);
+            statusMessage.postValue("Keine aktiven Geofences");
             return;
         }
 
         geofenceManager.updateGeofences(geofences, new GeofenceManager.GeofenceCallback() {
             @Override
             public void onSuccess() {
-                isLoading.setValue(false);
-                statusMessage.setValue("Geofences erfolgreich aktualisiert");
+                isLoading.postValue(false);
+                statusMessage.postValue("Geofences erfolgreich aktualisiert");
                 Log.d(TAG, "Geofences successfully registered: " + geofences.size());
             }
 
             @Override
             public void onError(String errorMessage) {
-                isLoading.setValue(false);
-                statusMessage.setValue("Fehler: " + errorMessage);
+                isLoading.postValue(false);
+                statusMessage.postValue("Fehler: " + errorMessage);
                 Log.e(TAG, "Error registering geofences: " + errorMessage);
             }
         });
@@ -192,29 +223,61 @@ public class MainViewModel extends AndroidViewModel {
         private float batteryLevel;
         private boolean isCharging;
         private String networkType;
+        private String providerDetails;
+        private int locationMode = 1; // Standard: Ausgewogen
 
         public DeviceStatus() {
             this.batteryLevel = 0;
             this.isCharging = false;
             this.networkType = "UNKNOWN";
+            this.providerDetails = "Initializing...";
         }
 
         public DeviceStatus(float batteryLevel, boolean isCharging, String networkType) {
             this.batteryLevel = batteryLevel;
             this.isCharging = isCharging;
             this.networkType = networkType;
+            this.providerDetails = "";
         }
 
         public float getBatteryLevel() {
             return batteryLevel;
         }
 
+        public void setBatteryLevel(float batteryLevel) {
+            this.batteryLevel = batteryLevel;
+        }
+
         public boolean isCharging() {
             return isCharging;
         }
 
+        public void setCharging(boolean charging) {
+            isCharging = charging;
+        }
+
         public String getNetworkType() {
             return networkType;
+        }
+
+        public void setNetworkType(String networkType) {
+            this.networkType = networkType;
+        }
+
+        public String getProviderDetails() {
+            return providerDetails;
+        }
+
+        public void setProviderDetails(String providerDetails) {
+            this.providerDetails = providerDetails;
+        }
+
+        public int getLocationMode() {
+            return locationMode;
+        }
+
+        public void setLocationMode(int locationMode) {
+            this.locationMode = locationMode;
         }
     }
 }

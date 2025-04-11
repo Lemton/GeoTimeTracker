@@ -9,107 +9,137 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import de.dhbw.geofencinglbs.data.local.AppDatabase;
 import de.dhbw.geofencinglbs.data.local.GeofenceDao;
 import de.dhbw.geofencinglbs.data.local.GeofenceEventDao;
+import de.dhbw.geofencinglbs.data.local.AppDatabase;
 import de.dhbw.geofencinglbs.model.GeofenceEvent;
 import de.dhbw.geofencinglbs.model.GeofenceModel;
 
 /**
- * Repository für den Zugriff auf Geofence-Daten.
- * Stellt eine saubere API für den Datenzugriff bereit und
- * abstrahiert die Datenquelle (lokale Datenbank).
+ * Repository-Klasse als Single Source of Truth für Geofence-Daten.
+ * Abstrahiert den Datenzugriff und stellt eine saubere API für den Zugriff auf Daten aus verschiedenen Quellen bereit.
  */
 public class GeofenceRepository {
-
     private final GeofenceDao geofenceDao;
-    private final GeofenceEventDao geofenceEventDao;
-    private final LiveData<List<GeofenceModel>> allGeofences;
-    private final ExecutorService executor;
+    private final GeofenceEventDao eventDao;
+    private final ExecutorService executorService;
 
+    /**
+     * Konstruktor für das Repository.
+     */
     public GeofenceRepository(Application application) {
         AppDatabase database = AppDatabase.getInstance(application);
         geofenceDao = database.geofenceDao();
-        geofenceEventDao = database.geofenceEventDao();
-        allGeofences = geofenceDao.getAllGeofences();
-        executor = Executors.newSingleThreadExecutor();
+        eventDao = database.geofenceEventDao();
+        executorService = Executors.newFixedThreadPool(4);
     }
 
-    // Methoden für Geofence-Operationen
+    /**
+     * Gibt alle Geofences zurück.
+     */
     public LiveData<List<GeofenceModel>> getAllGeofences() {
-        return allGeofences;
+        return geofenceDao.getAllGeofences();
     }
 
+    /**
+     * Gibt nur aktive Geofences zurück (für die Registrierung beim Geofencing-Service).
+     */
+    public void getActiveGeofences(GeofenceDataCallback callback) {
+        executorService.execute(() -> {
+            List<GeofenceModel> activeGeofences = geofenceDao.getActiveGeofencesSync();
+            callback.onGeofencesLoaded(activeGeofences);
+        });
+    }
+
+    /**
+     * Gibt die letzten N Ereignisse zurück.
+     */
+    public LiveData<List<GeofenceEvent>> getRecentEvents(int limit) {
+        return eventDao.getRecentEvents(limit);
+    }
+
+    /**
+     * Fügt einen neuen Geofence hinzu.
+     */
     public void insert(GeofenceModel geofence) {
-        executor.execute(() -> {
+        executorService.execute(() -> {
             geofenceDao.insert(geofence);
         });
     }
 
+    /**
+     * Aktualisiert einen vorhandenen Geofence.
+     */
     public void update(GeofenceModel geofence) {
-        executor.execute(() -> {
+        executorService.execute(() -> {
             geofenceDao.update(geofence);
         });
     }
 
+    /**
+     * Löscht einen Geofence.
+     */
     public void delete(GeofenceModel geofence) {
-        executor.execute(() -> {
+        executorService.execute(() -> {
             geofenceDao.delete(geofence);
         });
     }
 
-    public LiveData<GeofenceModel> getGeofenceById(long geofenceId) {
-        return geofenceDao.getGeofenceByIdLive(geofenceId);
-    }
-
-    public void getActiveGeofences(GeofenceCallback callback) {
-        executor.execute(() -> {
-            List<GeofenceModel> geofences = geofenceDao.getActiveGeofences();
-            callback.onGeofencesLoaded(geofences);
-        });
-    }
-
-    // Methoden für Geofence-Event-Operationen
+    /**
+     * Fügt ein neues Ereignis hinzu.
+     */
     public void insertEvent(GeofenceEvent event) {
-        executor.execute(() -> {
-            long eventId = geofenceEventDao.insert(event);
-            GeofenceModel geofence = geofenceDao.getGeofenceById(event.getGeofenceId());
+        executorService.execute(() -> {
+            eventDao.insert(event);
+        });
+    }
 
-            // Aktualisiere den Geofence mit dem letzten Ereignis
-            switch (event.getEventType()) {
-                case GeofenceEvent.TYPE_ENTER:
-                    geofence.setLastEntryTime(event.getTimestamp());
-                    break;
-                case GeofenceEvent.TYPE_EXIT:
-                    geofence.setLastExitTime(event.getTimestamp());
-                    break;
+    /**
+     * Aktualisiert die Eintrittszeit eines Geofences.
+     */
+    public void updateGeofenceEntryTime(long geofenceId, long entryTime) {
+        executorService.execute(() -> {
+            GeofenceModel geofence = geofenceDao.getGeofenceByIdSync(geofenceId);
+            if (geofence != null) {
+                geofence.setLastEntryTime(entryTime);
+                geofenceDao.update(geofence);
             }
-
-            geofenceDao.update(geofence);
         });
     }
 
-    public LiveData<List<GeofenceEvent>> getEventsForGeofence(long geofenceId) {
-        return geofenceEventDao.getEventsForGeofence(geofenceId);
-    }
-
-    public LiveData<List<GeofenceEvent>> getRecentEvents(int limit) {
-        return geofenceEventDao.getRecentEvents(limit);
-    }
-
-    public void calculateDwellTime(long geofenceId, long startTime, long endTime, DwellTimeCallback callback) {
-        executor.execute(() -> {
-            long dwellTime = geofenceEventDao.calculateTotalDwellTime(geofenceId, startTime, endTime);
-            callback.onDwellTimeCalculated(dwellTime);
+    /**
+     * Aktualisiert die Austrittszeit eines Geofences.
+     */
+    public void updateGeofenceExitTime(long geofenceId, long exitTime) {
+        executorService.execute(() -> {
+            GeofenceModel geofence = geofenceDao.getGeofenceByIdSync(geofenceId);
+            if (geofence != null) {
+                geofence.setLastExitTime(exitTime);
+                geofenceDao.update(geofence);
+            }
         });
     }
 
-    // Callback-Interfaces
-    public interface GeofenceCallback {
+    /**
+     * Aktualisiert explizit die Daten aus der Datenbank
+     */
+    public void refreshGeofences() {
+        // Diese Methode ist Teil der LiveData-Implementierung und funktioniert ohne explizite Aktualisierung
+        // Wir können hier jedoch zusätzliche Logik für zukünftige Erweiterungen hinzufügen
+    }
+
+    /**
+     * Aktualisiert explizit die Ereignisdaten aus der Datenbank
+     */
+    public void refreshEvents() {
+        // Diese Methode ist Teil der LiveData-Implementierung und funktioniert ohne explizite Aktualisierung
+        // Wir können hier jedoch zusätzliche Logik für zukünftige Erweiterungen hinzufügen
+    }
+
+    /**
+     * Callback-Interface für die asynchrone Datenabfrage.
+     */
+    public interface GeofenceDataCallback {
         void onGeofencesLoaded(List<GeofenceModel> geofences);
-    }
-
-    public interface DwellTimeCallback {
-        void onDwellTimeCalculated(long dwellTimeMillis);
     }
 }

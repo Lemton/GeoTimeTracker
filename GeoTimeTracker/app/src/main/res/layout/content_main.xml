@@ -91,6 +91,71 @@
                     app:layout_constraintTop_toBottomOf="@+id/textViewLocation" />
 
                 <TextView
+                    android:id="@+id/textViewLastUpdate"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="Letztes Update: -"
+                    android:textSize="12sp"
+                    android:textStyle="italic"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toBottomOf="@+id/textViewProvider" />
+
+                <!-- Genauigkeits-Indikator -->
+                <ProgressBar
+                    android:id="@+id/accuracyProgressBar"
+                    style="?android:attr/progressBarStyleHorizontal"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:max="100"
+                    android:progress="50"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toBottomOf="@+id/textViewLastUpdate" />
+
+                <!-- Live-Update-Indikatoren -->
+                <LinearLayout
+                    android:id="@+id/indicatorLayout"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="4dp"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toBottomOf="@+id/accuracyProgressBar">
+
+                    <View
+                        android:id="@+id/locationUpdateIndicator"
+                        android:layout_width="12dp"
+                        android:layout_height="12dp"
+                        android:background="@drawable/circle_indicator"
+                        android:layout_margin="4dp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Location-Update"
+                        android:textSize="12sp" />
+
+                    <View
+                        android:layout_width="0dp"
+                        android:layout_height="0dp"
+                        android:layout_weight="1" />
+
+                    <View
+                        android:id="@+id/geofenceTransitionIndicator"
+                        android:layout_width="12dp"
+                        android:layout_height="12dp"
+                        android:background="@drawable/circle_indicator_red"
+                        android:layout_margin="4dp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Geofence-Ereignis"
+                        android:textSize="12sp" />
+                </LinearLayout>
+
+                <TextView
                     android:id="@+id/textViewBatteryStatus"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -98,7 +163,7 @@
                     android:text="Akku: -"
                     android:textAppearance="?attr/textAppearanceBody2"
                     app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toBottomOf="@+id/textViewProvider" />
+                    app:layout_constraintTop_toBottomOf="@+id/indicatorLayout" />
 
                 <TextView
                     android:id="@+id/textViewNetworkStatus"
