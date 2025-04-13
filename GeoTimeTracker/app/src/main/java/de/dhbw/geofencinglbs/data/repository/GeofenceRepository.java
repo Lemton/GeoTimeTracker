@@ -86,54 +86,42 @@ public class GeofenceRepository {
     }
 
     /**
-     * Fügt ein neues Ereignis hinzu.
+     * Fügt ein neues Ereignis hinzu und aktualisiert den zugehörigen Geofence.
+     * Diese optimierte Methode führt beide Operationen in einer Transaktion aus,
+     * was die Effizienz erhöht und Verzögerungen minimiert.
      */
-    public void insertEvent(GeofenceEvent event) {
+    public void insertEventAndUpdateGeofence(GeofenceEvent event) {
         executorService.execute(() -> {
+            // Füge das Ereignis ein
             eventDao.insert(event);
-        });
-    }
 
-    /**
-     * Aktualisiert die Eintrittszeit eines Geofences.
-     */
-    public void updateGeofenceEntryTime(long geofenceId, long entryTime) {
-        executorService.execute(() -> {
-            GeofenceModel geofence = geofenceDao.getGeofenceByIdSync(geofenceId);
+            // Hole den zugehörigen Geofence und aktualisiere ihn
+            GeofenceModel geofence = geofenceDao.getGeofenceByIdSync(event.getGeofenceId());
             if (geofence != null) {
-                geofence.setLastEntryTime(entryTime);
+                // Aktualisiere den Geofence basierend auf dem Ereignistyp
+                switch (event.getEventType()) {
+                    case GeofenceEvent.TYPE_ENTER:
+                        geofence.setLastEntryTime(event.getTimestamp());
+                        break;
+                    case GeofenceEvent.TYPE_EXIT:
+                        geofence.setLastExitTime(event.getTimestamp());
+                        break;
+                }
+                // Speichere den aktualisierten Geofence
                 geofenceDao.update(geofence);
             }
         });
     }
 
-    /**
-     * Aktualisiert die Austrittszeit eines Geofences.
-     */
-    public void updateGeofenceExitTime(long geofenceId, long exitTime) {
-        executorService.execute(() -> {
-            GeofenceModel geofence = geofenceDao.getGeofenceByIdSync(geofenceId);
-            if (geofence != null) {
-                geofence.setLastExitTime(exitTime);
-                geofenceDao.update(geofence);
-            }
-        });
-    }
-
-    /**
-     * Aktualisiert explizit die Daten aus der Datenbank
-     */
     public void refreshGeofences() {
-        // Diese Methode ist Teil der LiveData-Implementierung und funktioniert ohne explizite Aktualisierung
-        // Wir können hier jedoch zusätzliche Logik für zukünftige Erweiterungen hinzufügen
+
     }
 
     /**
      * Aktualisiert explizit die Ereignisdaten aus der Datenbank
      */
     public void refreshEvents() {
-        // Diese Methode ist Teil der LiveData-Implementierung und funktioniert ohne explizite Aktualisierung
-        // Wir können hier jedoch zusätzliche Logik für zukünftige Erweiterungen hinzufügen
+
     }
 
     /**

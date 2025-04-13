@@ -34,21 +34,17 @@ public class GeofenceBroadcastReceiver extends BroadcastReceiver {
             Log.e(TAG, "GeofencingEvent fromIntent returned null");
             return;
         }
-
         if (geofencingEvent.hasError()) {
             String errorMessage = GeofenceStatusCodes.getStatusCodeString(geofencingEvent.getErrorCode());
             Log.e(TAG, "Geofencing error: " + errorMessage);
             return;
         }
-
         // Übergangstyp bestimmen
         int geofenceTransition = geofencingEvent.getGeofenceTransition();
-
         // Prüfen, ob es sich um ein bekanntes Übergangs-Event handelt
         if (geofenceTransition == Geofence.GEOFENCE_TRANSITION_ENTER ||
                 geofenceTransition == Geofence.GEOFENCE_TRANSITION_EXIT ||
                 geofenceTransition == Geofence.GEOFENCE_TRANSITION_DWELL) {
-
             // Betroffene Geofences abrufen
             List<Geofence> triggeringGeofences = geofencingEvent.getTriggeringGeofences();
 
@@ -57,12 +53,10 @@ public class GeofenceBroadcastReceiver extends BroadcastReceiver {
                 Log.w(TAG, "No triggering geofences found");
                 return;
             }
-
             // Für jeden ausgelösten Geofence ein Event erstellen
             for (Geofence geofence : triggeringGeofences) {
                 processGeofenceTransition(context, geofence, geofenceTransition, geofencingEvent.getTriggeringLocation());
             }
-
             // Broadcast senden für Live-Updates in der UI
             Intent broadcastIntent = new Intent("de.dhbw.geofencinglbs.GEOFENCE_TRANSITION");
             broadcastIntent.putExtra("transition_type", geofenceTransition);
@@ -126,10 +120,10 @@ public class GeofenceBroadcastReceiver extends BroadcastReceiver {
                 networkType
         );
 
-        // Event in der Datenbank speichern
+        // Event in der Datenbank speichern und Geofence in einer Operation aktualisieren
         GeofenceRepository repository = new GeofenceRepository(
                 (android.app.Application) context.getApplicationContext());
-        repository.insertEvent(event);
+        repository.insertEventAndUpdateGeofence(event);
 
         // Debugging-Informationen
         Log.d(TAG, String.format("Geofence ID %d: %s (Accuracy: %.2fm, Provider: %s, Battery: %.1f%%)",
@@ -138,11 +132,5 @@ public class GeofenceBroadcastReceiver extends BroadcastReceiver {
         // Benachrichtigung erstellen
         NotificationHelper.showGeofenceNotification(context, geofenceId, transitionType, location);
 
-        // Update des Geofence-Modells mit Ein-/Austrittszeiten
-        if (transitionType == Geofence.GEOFENCE_TRANSITION_ENTER) {
-            repository.updateGeofenceEntryTime(geofenceId, System.currentTimeMillis());
-        } else if (transitionType == Geofence.GEOFENCE_TRANSITION_EXIT) {
-            repository.updateGeofenceExitTime(geofenceId, System.currentTimeMillis());
-        }
     }
 }
