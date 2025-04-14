@@ -87,8 +87,7 @@ public class GeofenceRepository {
 
     /**
      * Fügt ein neues Ereignis hinzu und aktualisiert den zugehörigen Geofence.
-     * Diese optimierte Methode führt beide Operationen in einer Transaktion aus,
-     * was die Effizienz erhöht und Verzögerungen minimiert.
+     * Diese optimierte Methode führt beide Operationen in einer Transaktion aus..
      */
     public void insertEventAndUpdateGeofence(GeofenceEvent event) {
         executorService.execute(() -> {

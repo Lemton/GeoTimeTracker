@@ -42,8 +42,6 @@ public class LocationService extends Service {
     public static final int MODE_HIGH_ACCURACY = 0;
     public static final int MODE_BALANCED = 1;
     public static final int MODE_LOW_POWER = 2;
-
-    // Intervalldauern in Millisekunden für verschiedene Modi
     private static final long UPDATE_INTERVAL_HIGH_ACCURACY = 5000; // 5 Sekunden
     private static final long UPDATE_INTERVAL_BALANCED = 15000; // 15 Sekunden
     private static final long UPDATE_INTERVAL_LOW_POWER = 60000; // 1 Minute
@@ -176,9 +174,6 @@ public class LocationService extends Service {
                 .build();
     }
 
-    /**
-     * Startet die Standortaktualisierungen.
-     */
     @SuppressWarnings("MissingPermission") // Die Berechtigungen werden in der Activity überprüft
     private void startLocationUpdates() {
         try {
